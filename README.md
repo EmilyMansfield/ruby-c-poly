@@ -128,7 +128,7 @@ way this code runs without error.
 To fix the contents of `argv`, we use Ruby's `ARGV` variable, then we're
 free to parse the arguments as normal!
 
-~~
+~~~
 //; argv = [''] + ARGV # Compensate for the lack of program name
 ~~~
 

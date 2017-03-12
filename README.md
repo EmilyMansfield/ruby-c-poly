@@ -3,7 +3,9 @@ runs in both languages not too difficult. This is a summary of the
 techniques I've found so far to implement common language constructs
 simultaneously in both languages.
 
-By abusing the fact that the C comment character constructs an empty
+# Comments and Ruby-only Execution
+
+By abusing the fact that the C++ comment character constructs an empty
 regular expression in Ruby, any code after `//;` will be run by Ruby
 only. I originally had it matching an empty string with `//=~""`, but
 since a literal is a valid expression it's not necessary to do that.
@@ -37,6 +39,7 @@ can be used to map Ruby keywords to C functionality
 #include <stdio.h> // This is obviously very convenient too
 ~~~
 
+# `main()`
 To define `main`, we'll need a way for Ruby to accept `{}` after
 function names. But that's the syntax for a block, so we define a
 function that simply yields to whatever it was given, executing that
@@ -67,6 +70,8 @@ int main() {
 
 which will call the `int` function with the whole `main() {}` shebang
 passed as an argument. But since arguments are evaluated, `main` is run.
+
+# Variables
 The same mechanism gives us variable declarations for free
 
 ~~~
@@ -92,6 +97,7 @@ By repeating this construction with different types we can use variables
 pretty much how we normally would in C, but in both languages
 simultaneously.
 
+# Arguments
 By using the same `*args` construction, we can give arguments to `main`
 
 ~~~
@@ -141,6 +147,7 @@ as Ruby has the same (or at least very similar, I haven't checked fully)
 printf("%d from %s and %s\n", a, "Ruby", "C");
 ~~~
 
+# If Statements and While Loops
 What about any kind of logic? Well `if` statements are pretty easy,
 because Ruby let's you but parentheses if you want
 
@@ -199,3 +206,80 @@ general expressions, because it requires the subexpressions to cast to
 `true`, which may not always be the case. This problem goes away if we
 can create functions, where then the loop body can simply call the
 function.
+
+# Functions
+
+We can't apply the same strategy for `main` to general functions,
+because yielding to a block would call the function when it was defined
+and do nothing when it was called. Instead, we need a method of
+remembering the block originally passed to the function. The simplest
+way is to use global variables
+
+~~~
+//; def void(_); end
+//; $foo_block = ->(){}
+//; def foo(&block); block_given? ? $foo_block = block : $foo_block.call; end;
+
+void foo() {
+    printf("Hello, world\n");
+}
+
+...
+
+foo(); #line 1 // Now "Hello, world" is printed
+~~~
+
+Clearly this is pretty ugly, and requires a lot of Ruby-specific
+boilerplate. A more elegant alternative is to let `foo` redefine itself
+to the block
+
+~~~
+//; def void(_); end
+//; def foo(&block); define_method(:foo, block) if block_given?; end
+
+#line 1 // `foo` is redefined to call the block
+void foo() { }
+
+#line 1 // Calls the block originally passed to foo
+foo()
+~~~
+
+Both of these strategies allow for declarations before definitions, too
+
+~~~
+#line 1 // In the first case $foo_block is called, but it's defined to a
+#line 1 // no-op. In the second case, there's no block so nothing
+#line 1 // happens.
+void foo();
+
+void foo() { }
+~~~
+
+Unfortunately, we have no hope of returning values because we can't
+`return` in a block. We can still send values back to the caller by
+using global variables though (conveniently starting a variable name
+with `$` is legal C).
+
+~~~
+int $ret = 0;
+void foo() {
+    $ret = 10;
+}
+
+~~~
+
+This is annoying to use because every function call becomes two
+statements. Using the ternary operator though we can combine the two
+into one
+
+~~~
+#line 1 // The compiler will warn that the return is missing, but not
+#line 1 // error. This is necessary because void cannot be cast to bool
+int foo() {
+    $ret = 10;
+}
+#line 1 // The condition is always true so always evaluates to $ret, but
+#line 1 // unless the compiler overzealously optimizes, foo will still
+#line 1 // run
+((foo() || true) ? $ret : 0)
+~~~

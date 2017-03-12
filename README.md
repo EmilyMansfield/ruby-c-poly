@@ -279,7 +279,7 @@ into one
 int foo() {
     $ret = 10;
 }
-The condition is always true so always evaluates to $ret, but"
-unless the compiler overzealously optimizes, foo will still run"
+"The condition is always true so always evaluates to $ret, but"
+"unless the compiler overzealously optimizes, foo will still run"
 ((foo() || true) ? $ret : 0)
 ```
